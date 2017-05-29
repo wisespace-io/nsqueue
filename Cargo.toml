@@ -10,7 +10,7 @@ repository = "https://github.com/wisespace-io/nsq-rs"
 readme = "README.md"
 
 [badges]
-travis-ci = { repository = "wisespace-io/nsq-rs" }
+travis-ci = { repository = "wisespace-io/nsqueue" }
 
 [lib]
 name = "nsqueue"
