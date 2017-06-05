@@ -28,29 +28,31 @@ impl Producer {
         Box::new(ret)
     }
 
+    // Publish a message to a topic
     pub fn publish(&self, topic: String, message: String) -> Box<Future<Item = String, Error = io::Error>> {
         let mut request = RequestMessage::new();
         request.create_pub_command(topic, message);        
         
-        let resp = self.call(request)
-            .map_err(|e| {
-                 e.into()}
-                )
-            .and_then(|resp| {
-                if resp != "OK" {
-                    Err(io::Error::new(io::ErrorKind::Other, "expected OK"))
-                } else {
-                    Ok(resp)
-                }
-            });
-
-        Box::new(resp)
+        self.handler(request)
     }
 
+    // Publish multiple messages to a topic (atomically)
     pub fn mpublish(&self, topic: String, messages: Vec<String>) -> Box<Future<Item = String, Error = io::Error>> {
         let mut request = RequestMessage::new();
         request.create_mpub_command(topic, messages);        
         
+        self.handler(request)
+    } 
+
+    // Publish a deferred message to a topic
+    pub fn dpublish(&self, topic: String, message: String, defer_time: i64) -> Box<Future<Item = String, Error = io::Error>> {
+        let mut request = RequestMessage::new();
+        request.create_dpub_command(topic, message, defer_time);
+        
+        self.handler(request)
+    }
+
+    fn handler(&self, request: RequestMessage) -> Box<Future<Item = String, Error = io::Error>> {
         let resp = self.call(request)
             .map_err(|e| {
                  e.into()}
@@ -63,8 +65,8 @@ impl Producer {
                 }
             });
 
-        Box::new(resp)
-    }    
+        Box::new(resp)        
+    }
 }
 
 impl Service for Producer {

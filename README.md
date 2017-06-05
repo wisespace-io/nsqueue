@@ -15,6 +15,13 @@ A [Tokio](https://tokio.rs/) based client implementation for the [NSQ]((https://
 - [ ] Snappy
 - [ ] Auth
 
+### Launch NSQ
+```
+$ nsqlookupd & 
+$ nsqd --lookupd-tcp-address=127.0.0.1:4160 &
+$ nsqadmin --lookupd-http-address=127.0.0.1:4161 &
+```
+
 ### PUB
 ```
 extern crate futures;

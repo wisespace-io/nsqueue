@@ -3,6 +3,8 @@ pub mod commands {
     
     pub const PUB: &'static str = "PUB";
     pub const MPUB: &'static str = "MPUB";
+    pub const DPUB: &'static str = "DPUB";
+
     pub const SUB: &'static str = "SUB";
 
     pub const RDY: &'static str = "RDY";

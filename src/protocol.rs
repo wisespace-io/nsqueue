@@ -88,6 +88,11 @@ impl RequestMessage {
         self.body_messages = Some(messages);
     }
 
+    pub fn create_dpub_command(&mut self, topic: String, message: String, defer_time: i64) {
+        self.header = Some(format!("{} {} {}\n", commands::DPUB, topic, defer_time.to_string()));
+        self.body = Some(message);
+    }
+
     pub fn create_sub_command(&mut self, topic: String, channel: String) {
         self.header = Some(format!("{} {} {}\n", commands::SUB, topic, channel));
     }
