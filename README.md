@@ -1,14 +1,14 @@
 [![Build Status](https://travis-ci.org/wisespace-io/nsqueue.png?branch=master)](https://travis-ci.org/wisespace-io/nsqueue)
 [![Crates.io](https://img.shields.io/crates/v/nsqueue.svg)](https://crates.io/crates/nsqueue)
 
-# nsq-rs
+# nsqueue
 A [Tokio](https://tokio.rs/) based client implementation for the [NSQ]((https://github.com/bitly/nsq)) realtime message processing system
 
 ## WORK IN PROGRESS
 
 ### Current features
 - [X] PUB
-- [ ] SUB
+- [X] SUB
 - [ ] Discovery
 - [ ] Backoff 
 - [ ] TLS

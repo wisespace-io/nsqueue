@@ -1,5 +1,7 @@
 use std::io;
 use std::io::Cursor;
+use std::iter::Iterator;
+
 use bytes::{Buf, BufMut, BytesMut, BigEndian};
 use tokio_io::codec::{Encoder, Decoder};
 use std::str;
@@ -89,6 +91,28 @@ impl Encoder for NsqCodec {
             let body_len = body.len() as u32;
             buf_32.put_u32::<BigEndian>(body_len);
             buf_32.put(&body[..]);
+            buf.extend(buf_32);
+        }
+
+        if let Some(body_messages) = message.body_messages {
+            let total_bytes = body_messages
+               .iter()
+               .map(|message| message.len())
+               .fold(0, |acc, len| acc + len );
+
+            let mut buf_32 = Vec::with_capacity(total_bytes);
+            // [4-byte body size]
+            let body_len = total_bytes as u32;
+            buf_32.put_u32::<BigEndian>(body_len);
+            // [4-byte num messages]
+            let messages_len = body_messages.len() as u32;
+            buf_32.put_u32::<BigEndian>(messages_len);
+            // [ 4-byte message #1 size ][ N-byte binary data ] ...
+            for message in &body_messages {
+                let message_len = message.len() as u32;
+                buf_32.put_u32::<BigEndian>(message_len);
+                buf_32.put(&message[..]);    
+            }
             buf.extend(buf_32);
         }
 

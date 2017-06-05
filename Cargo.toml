@@ -5,7 +5,7 @@ authors = ["Flavio Oliveira <rusty@wisespace.io>"]
 
 description = "Rust client for the NSQ realtime message processing system"
 license = "MIT OR Apache-2.0"
-keywords = ["nsq", "queue"]
+keywords = ["nsq", "queue", "tokio", "asynchronous"]
 repository = "https://github.com/wisespace-io/nsqueue"
 readme = "README.md"
 

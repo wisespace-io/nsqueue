@@ -1,18 +1,15 @@
-use futures::{Future, Poll, Stream, IntoFuture};
+use futures::{Future, IntoFuture};
 use futures::future::Either;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::Handle;
 use tokio_proto::{TcpClient};
 use tokio_proto::pipeline::{ClientService};
 use tokio_service::{Service};
-use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_io::codec::{Framed};
 
 use std::io;
 use std::net::SocketAddr;
 
 use config::Config;
-use codec::NsqCodec;
 use protocol::{NsqProtocol, RequestMessage};
 
 #[derive(Clone)]
@@ -23,7 +20,8 @@ pub struct Consumer {
 impl Consumer {
     /// Establish a connection and send protocol version.
     pub fn connect(addr: &SocketAddr, handle: &Handle, config: Config) -> Box<Future<Item = Consumer, Error = io::Error>> {
-        let ret = TcpClient::new(NsqProtocol::new(config))
+        let protocol = NsqProtocol::new(config);
+        let ret = TcpClient::new(protocol)
             .connect(addr, handle)
             .map(|client_service| {
                 Consumer { inner: client_service }
@@ -73,19 +71,5 @@ impl Service for Consumer {
             .and_then(|resp| {
                 Ok(resp)
             }))
-    }
-}
-
-// Implement as a stream
-pub struct Subscriber<T> {
-  pub transport: Framed<T, NsqCodec>,
-}
-
-impl<T: AsyncRead+AsyncWrite+'static> Stream for Subscriber<T> {
-    type Item = String;
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Option<String>, io::Error> {
-        self.transport.poll()
     }
 }

@@ -61,6 +61,7 @@ pub struct RequestMessage {
     pub version: Option<String>, 
     pub header: Option<String>,
     pub body: Option<String>,
+    pub body_messages: Option<Vec<String>>,
 }
 
 impl RequestMessage {
@@ -69,6 +70,7 @@ impl RequestMessage {
             version: None,
             header: None,
             body: None,
+            body_messages: None,
         }
     }
 
@@ -79,6 +81,11 @@ impl RequestMessage {
     pub fn create_pub_command(&mut self, topic: String, message: String) {
         self.header = Some(format!("{} {}\n", commands::PUB, topic));
         self.body = Some(message);
+    }
+
+    pub fn create_mpub_command(&mut self, topic: String, messages: Vec<String>) {
+        self.header = Some(format!("{} {}\n", commands::MPUB, topic));
+        self.body_messages = Some(messages);
     }
 
     pub fn create_sub_command(&mut self, topic: String, channel: String) {
