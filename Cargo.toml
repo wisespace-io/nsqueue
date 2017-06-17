@@ -1,6 +1,6 @@
 [package]
 name = "nsqueue"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Flavio Oliveira <rusty@wisespace.io>"]
 
 description = "Rust client for the NSQ realtime message processing system"
