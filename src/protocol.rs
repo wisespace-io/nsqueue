@@ -2,7 +2,7 @@ use std::io;
 
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::{Framed};
-use tokio_proto::pipeline::{ClientProto};
+use tokio_proto::streaming::pipeline::{Frame, ClientProto};
 
 use serde_json::{to_string};
 
@@ -25,9 +25,14 @@ impl NsqProtocol {
     }
 }
 
+#[allow(unused_variables)]
 impl<T: AsyncRead + AsyncWrite + 'static> ClientProto<T> for NsqProtocol {
     type Request = RequestMessage;
+    type RequestBody = RequestMessage;
     type Response = String;
+    type ResponseBody = String;
+    
+    type Error = io::Error;
     type Transport = Framed<T, NsqCodec>;
     type BindTransport = Box<Future<Item = Self::Transport, Error = io::Error>>;
 
@@ -36,19 +41,25 @@ impl<T: AsyncRead + AsyncWrite + 'static> ClientProto<T> for NsqProtocol {
         let mut request = RequestMessage::new();
         request.set_protocol_version(commands::VERSION_2);
                 
+        let codec = NsqCodec {
+            decoding_head: true,
+        };
+
         // Send protocol version
-        let handshake = io.framed(NsqCodec).send(request.clone())
+        let tst = request.clone();
+        let version = Frame::Message {message: tst, body: false };
+        let handshake = io.framed(codec).send(version)
         .and_then(move |transport| {
             let mut request = RequestMessage::new();
             request.create_identify_command(config);
             
             // Send IDENTIFY
-            let ch = transport.send(request.clone())
+            let identify = Frame::Message {message: request.clone(), body: false };
+            let ch = transport.send(identify)
                 .and_then(|transport| transport.into_future().map_err(|(e, _)| e))
                 .and_then(|(resp, transport)| {
                     Ok(transport)                      
                 });
-
             ch
         });
         
@@ -105,5 +116,9 @@ impl RequestMessage {
 
     pub fn create_rdy_command(&mut self) {
         self.header = Some(format!("{} 1\n", commands::RDY));
+    }  
+
+    pub fn create_fin_command(&mut self, message_id: String) {
+        self.header = Some(format!("{} {}\n", commands::FIN, message_id));
     }       
 }

@@ -1,20 +1,23 @@
-use futures::{Future, IntoFuture};
-use futures::future::Either;
-use tokio_core::net::TcpStream;
+use futures::{Future, future};
+
+use tokio_service::Service;
 use tokio_core::reactor::Handle;
+
 use tokio_proto::{TcpClient};
-use tokio_proto::pipeline::{ClientService};
-use tokio_service::{Service};
+use tokio_proto::util::client_proxy::ClientProxy;
+use tokio_proto::streaming::{Message};
 
 use std::io;
 use std::net::SocketAddr;
 
 use config::Config;
+use response::{NSQ, ResponseStream};
+use codec::{NsqMessage, NsqResponseMessage, ClientTypeMap};
 use protocol::{NsqProtocol, RequestMessage};
 
 #[derive(Clone)]
 pub struct Consumer {
-    inner: ClientService<TcpStream, NsqProtocol>,
+    inner: ClientTypeMap<ClientProxy<NsqMessage, NsqResponseMessage, io::Error>>,
 }
 
 impl Consumer {
@@ -23,53 +26,73 @@ impl Consumer {
         let protocol = NsqProtocol::new(config);
         let ret = TcpClient::new(protocol)
             .connect(addr, handle)
-            .map(|client_service| {
-                Consumer { inner: client_service }
+            .map(|client_proxy| {
+                let type_map = ClientTypeMap { inner: client_proxy };
+                Consumer { inner: type_map }
             });
 
         Box::new(ret)
     } 
 
-    // TODO: Box<Future<Item = Subscriber<T>, Error = io::Error>>
-    pub fn subscribe(&self, topic: String, channel: String) -> Box<Future<Item = String, Error = io::Error>> {
+    #[allow(unused_variables)]
+    pub fn subscribe(&self, topic: String, channel: String) -> Box<Future<Item = NSQ, Error = io::Error>> {
         let mut request = RequestMessage::new();
         request.create_sub_command(topic, channel);        
         
         let service = self.inner.clone();
 
-        let resp = self.call(request)
+        let resp = service.inner.call(Message::WithoutBody(request))
             .map_err(|e| {e.into()})
             .and_then(move |resp| {
-                if resp != "OK" {
-                    let fail: Result<String, io::Error> = Err(io::Error::new(io::ErrorKind::Other, "Failed to subscribe to a channel"));
-                    Either::A(fail.into_future())
-                } else {
-                    // Update RDY state (should use --max-rdy-count to bound this value)
-                    let mut request = RequestMessage::new();
-                    request.create_rdy_command();
-                    let rdy = service.call(request)
-                        .map_err(|e| {e.into()});
-                    Either::B(rdy)    
+                let mut request = RequestMessage::new();
+                request.create_rdy_command();
+                let rdy = service.inner.call(Message::WithoutBody(request))
+                    .map_err(|e| {e.into()});
+                rdy    
+            })
+            .map(move |resp| {                                  
+                match resp {
+                    Message::WithoutBody(str) => {
+                       panic!("Not supported: {}", str)
+                    },
+                    Message::WithBody(head, body) => {                  
+                       NSQ::Stream(ResponseStream { header: head, inner: body })
+                    }
                 }
             });
 
         Box::new(resp)
     } 
+
+    #[allow(unused_variables)]
+    pub fn fin(&self, message_id: String) -> Box<Future<Item = (), Error = io::Error>> {
+        let mut request = RequestMessage::new();
+        request.create_fin_command(message_id);        
+        
+        let service = self.inner.clone();
+
+        let resp = service.inner.call(Message::WithoutBody(request))
+            .map_err(|e| {
+                 e.into()}
+                )
+            .and_then(|resp| {
+                future::ok(())
+            });
+
+        Box::new(resp)
+    }    
 }
 
-impl Service for Consumer {
+impl<T> Service for ClientTypeMap<T>
+    where T: Service<Request = RequestMessage, Response = NsqResponseMessage, Error = io::Error>,
+          T::Future: 'static
+{
     type Request = RequestMessage;
-    type Response = String;
+    type Response = NsqResponseMessage;
     type Error = io::Error;
-    type Future = Box<Future<Item = String, Error = io::Error>>;
+    type Future = Box<Future<Item = NsqResponseMessage, Error = io::Error>>;
 
     fn call(&self, req: RequestMessage) -> Self::Future {
-        Box::new(self.inner.call(req)
-            .map_err(|e| {
-                e.into()}
-            )
-            .and_then(|resp| {
-                Ok(resp)
-            }))
+        Box::new(self.inner.call(req))
     }
 }

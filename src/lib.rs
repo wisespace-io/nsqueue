@@ -16,7 +16,7 @@ extern crate serde_derive;
 mod codec;
 mod commands;
 mod protocol;
-mod response;
+pub mod response;
 pub mod error;
 pub mod config;
 pub mod consumer;

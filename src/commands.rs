@@ -8,6 +8,7 @@ pub mod commands {
     pub const SUB: &'static str = "SUB";
 
     pub const RDY: &'static str = "RDY";
+    pub const FIN: &'static str = "FIN";
 
     pub const IDENTIFY: &'static str = "IDENTIFY";
 }

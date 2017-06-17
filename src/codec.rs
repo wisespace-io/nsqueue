@@ -4,23 +4,35 @@ use std::iter::Iterator;
 
 use bytes::{Buf, BufMut, BytesMut, BigEndian};
 use tokio_io::codec::{Encoder, Decoder};
+use tokio_proto::streaming::pipeline::Frame;
+use tokio_proto::streaming::{Body, Message};
 use std::str;
 
-use protocol::{RequestMessage};
+use protocol::RequestMessage;
 
 // Header: Size(4-Byte) + FrameType(4-Byte)
 const HEADER_LENGTH: usize = 8;
 
 // Frame Types
 const FRAME_TYPE_RESPONSE: i32 = 0x00;
-const FRAME_TYPE_ERROR: i32 =  0x01;
-const FRAME_TYPE_MESSAGE: i32 =  0x02;
+const FRAME_TYPE_ERROR: i32 = 0x01;
+const FRAME_TYPE_MESSAGE: i32 = 0x02;
+
+#[derive(Clone)]
+pub struct ClientTypeMap<T> {
+   pub inner: T,
+}
+
+pub type NsqMessage = Message<RequestMessage, Body<RequestMessage, io::Error>>;
+pub type NsqResponseMessage = Message<String, Body<String, io::Error>>;
 
 /// NSQ codec
-pub struct NsqCodec;
+pub struct NsqCodec {
+    pub decoding_head: bool
+}
 
 impl Decoder for NsqCodec {
-    type Item = String;
+    type Item = Frame<String, String, io::Error>;
     type Error = io::Error;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, io::Error> {
@@ -31,7 +43,7 @@ impl Decoder for NsqCodec {
         }
 
         let mut cursor = Cursor::new(buf.clone());
-        let size : i32 = cursor.get_i32::<BigEndian>();
+        let size: i32 = cursor.get_i32::<BigEndian>();
 
         if length < size as usize {
             return Ok(None);
@@ -39,83 +51,114 @@ impl Decoder for NsqCodec {
 
         let frame_type: i32 = cursor.get_i32::<BigEndian>();
 
-        // remove the serialized frame from the buffer.
-        buf.split_to(HEADER_LENGTH + length);
-
         if frame_type == FRAME_TYPE_RESPONSE {
+            // remove the serialized frame from the buffer.
+            buf.split_to(HEADER_LENGTH + length);
             match str::from_utf8(&cursor.bytes()) {
                 Ok(s) => {
-                   // return the parsed response
-                   Ok(Some(s.to_string()))
-                },
+                    Ok(Some(Frame::Message {
+                        message: s.to_string(),
+                        body: false,
+                    }))
+                }
                 Err(_) => Err(io::Error::new(io::ErrorKind::Other, "Invalid UTF-8")),
             }
         } else if frame_type == FRAME_TYPE_ERROR {
             Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid packet received"))
         } else if frame_type == FRAME_TYPE_MESSAGE {
-            let _ = cursor.get_i64::<BigEndian>(); // timestamp
-            let _ = cursor.get_u16::<BigEndian>(); // attempts
-            let _ = cursor.get_i16::<BigEndian>(); // message_id
-         
-            // message
-            match str::from_utf8(&cursor.bytes()) {
-                Ok(s) => {
-                   // return the parsed response
-                   Ok(Some(s.to_string()))
-                },
-                Err(_) => Err(io::Error::new(io::ErrorKind::Other, "Invalid UTF-8")),
+            let decoding_head = self.decoding_head;
+            // Toggle the state
+            self.decoding_head = !decoding_head;
+
+            if decoding_head {
+                let _ = cursor.get_i64::<BigEndian>(); // timestamp
+                let _ = cursor.get_u16::<BigEndian>(); // attempts
+ 
+                let mut message_id = vec![]; 
+                let reference = cursor.take(16);
+                message_id.put(reference); // hex string encoded in ASCII (16 bytes)
+
+                // message - Just send message_id for now
+                Ok(Some(
+                    Frame::Message {
+                        message: String::from_utf8(message_id).unwrap(),
+                        body: true,
+                    }
+                ))
+            } else {
+                // remove the serialized frame from the buffer.
+                buf.split_to(HEADER_LENGTH + length);
+                // Header already parsed, just skip
+                cursor.advance(26);
+                // Body
+                match str::from_utf8(&cursor.bytes()) {
+                    Ok(s) => {
+                        Ok(Some(
+                            Frame::Body {
+                                chunk: Some(s.to_string()),
+                            }
+                        ))
+                    }
+                    Err(_) => Err(io::Error::new(io::ErrorKind::Other, "Invalid UTF-8")),
+                }                
             }
         } else {
             Ok(None)
         }
-    }    
+    }
 }
 
+pub type CodecOutputFrame = Frame<RequestMessage, RequestMessage, io::Error>;
 impl Encoder for NsqCodec {
-    type Item = RequestMessage;
+    type Item = CodecOutputFrame;
     type Error = io::Error;
 
-    fn encode(&mut self, message: RequestMessage, buf: &mut BytesMut) -> io::Result<()> {
-        if let Some(version) = message.version {
-            buf.reserve(version.len());
-            buf.extend(version.as_bytes());
-        }
-        
-        if let Some(header) = message.header {
-            buf.reserve(header.len() + 1);
-            buf.extend(header.as_bytes());
-        }
+    fn encode(&mut self, message: Self::Item, buf: &mut BytesMut) -> io::Result<()> {
+        match message {
+            Frame::Message { message, .. } => {
+                if let Some(version) = message.version {
+                    buf.reserve(version.len());
+                    buf.extend(version.as_bytes());
+                }
 
-        if let Some(body) = message.body {
-            let mut buf_32 = Vec::with_capacity(body.len());
-            let body_len = body.len() as u32;
-            buf_32.put_u32::<BigEndian>(body_len);
-            buf_32.put(&body[..]);
-            buf.extend(buf_32);
-        }
+                if let Some(header) = message.header {
+                    buf.reserve(header.len() + 1);
+                    buf.extend(header.as_bytes());
+                }
 
-        if let Some(body_messages) = message.body_messages {
-            let total_bytes = body_messages
-               .iter()
-               .map(|message| message.len())
-               .fold(0, |acc, len| acc + len );
+                if let Some(body) = message.body {
+                    let mut buf_32 = Vec::with_capacity(body.len());
+                    let body_len = body.len() as u32;
+                    buf_32.put_u32::<BigEndian>(body_len);
+                    buf_32.put(&body[..]);
+                    buf.extend(buf_32);
+                }
 
-            let mut buf_32 = Vec::with_capacity(total_bytes);
-            // [4-byte body size]
-            let body_len = total_bytes as u32;
-            buf_32.put_u32::<BigEndian>(body_len);
-            // [4-byte num messages]
-            let messages_len = body_messages.len() as u32;
-            buf_32.put_u32::<BigEndian>(messages_len);
-            // [ 4-byte message #1 size ][ N-byte binary data ] ...
-            for message in &body_messages {
-                let message_len = message.len() as u32;
-                buf_32.put_u32::<BigEndian>(message_len);
-                buf_32.put(&message[..]);    
+                if let Some(body_messages) = message.body_messages {
+                    let total_bytes = body_messages
+                        .iter()
+                        .map(|message| message.len())
+                        .fold(0, |acc, len| acc + len);
+
+                    let mut buf_32 = Vec::with_capacity(total_bytes);
+                    // [4-byte body size]
+                    let body_len = total_bytes as u32;
+                    buf_32.put_u32::<BigEndian>(body_len);
+                    // [4-byte num messages]
+                    let messages_len = body_messages.len() as u32;
+                    buf_32.put_u32::<BigEndian>(messages_len);
+                    // [ 4-byte message #1 size ][ N-byte binary data ] ...
+                    for message in &body_messages {
+                        let message_len = message.len() as u32;
+                        buf_32.put_u32::<BigEndian>(message_len);
+                        buf_32.put(&message[..]);
+                    }
+                    buf.extend(buf_32);
+                }
+                Ok(())
             }
-            buf.extend(buf_32);
+            Frame::Error { error, .. } => Err(error),
+            Frame::Body { .. } => panic!("Streaming of Requests is not currently supported"),
         }
-
-        Ok(())
     }
 }

@@ -2,11 +2,12 @@ extern crate futures;
 extern crate tokio_core;
 extern crate nsqueue;
 
-use futures::Future;
+use futures::{Stream, Future};
 use tokio_core::reactor::Core;
 
 use nsqueue::config::*;
 use nsqueue::consumer::*;
+use nsqueue::response::NSQ;
 
 fn main() {
      let mut core = Core::new().unwrap();
@@ -17,12 +18,19 @@ fn main() {
      core.run(
          Consumer::connect(&addr, &handle, Config::default())
          .and_then(|conn| {
-            // TODO: Implement subscription as a stream 
             conn.subscribe("some_topic".into(), "some_channel".into())
-            .and_then(|message| {
-                println!("Got message {}", message);
-                Ok(())
-             })
+            .and_then(move |message| {
+                match message {
+                    NSQ::Stream(response) => {
+                        let message_id = response.header.clone();
+                        let ret = response.for_each(move |message| {
+                            println!("Response: {:?}", message);
+                            conn.fin(message_id.clone()) // Inform NSQ (Message consumed) 
+                        });
+                        ret
+                    }
+                }
+            })
          })
      ).unwrap();
 }
