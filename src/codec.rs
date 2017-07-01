@@ -19,6 +19,9 @@ const FRAME_TYPE_RESPONSE: i32 = 0x00;
 const FRAME_TYPE_ERROR: i32 = 0x01;
 const FRAME_TYPE_MESSAGE: i32 = 0x02;
 
+
+const HEARTBEAT: &'static str = "_heartbeat_";
+
 #[derive(Clone)]
 pub struct ClientTypeMap<T> {
    pub inner: T,
@@ -57,10 +60,20 @@ impl Decoder for NsqCodec {
             buf.split_to(HEADER_LENGTH + length);
             match str::from_utf8(&cursor.bytes()) {
                 Ok(s) => {
-                    Ok(Some(Frame::Message {
-                        message: s.to_string(),
-                        body: false,
-                    }))
+                    let decoded_message = s.to_string();
+
+                    // TODO: Implement a proper way to handle the heartbeat
+                    if decoded_message == HEARTBEAT && !self.decoding_head {
+                        Ok(Some(self.heartbeat_message()))
+                    } else if decoded_message == HEARTBEAT {
+                        // toggle streaming
+                        Ok(Some(self.streaming_flag()))
+                    } else {
+                        Ok(Some(Frame::Message {
+                            message: decoded_message,
+                            body: false,
+                        }))
+                    }
                 }
                 Err(_) => Err(io::Error::new(io::ErrorKind::Other, "Invalid UTF-8")),
             }
@@ -68,15 +81,8 @@ impl Decoder for NsqCodec {
             Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid packet received"))
         } else if frame_type == FRAME_TYPE_MESSAGE {
             if self.decoding_head {
-                self.decoding_head = false;
-
-                // message - Just send message_id for now
-                Ok(Some(
-                    Frame::Message {
-                        message: "".into(),
-                        body: true,
-                    }
-                ))
+                // toggle streaming
+                Ok(Some(self.streaming_flag()))
             } else {
                 let timestamp = cursor.get_i64::<BigEndian>(); // timestamp
                 let _ = cursor.get_u16::<BigEndian>(); // attempts
@@ -156,6 +162,31 @@ impl Encoder for NsqCodec {
             }
             Frame::Error { error, .. } => Err(error),
             Frame::Body { .. } => panic!("Streaming of Requests is not currently supported"),
+        }
+    }
+}
+
+impl NsqCodec {
+    
+    fn heartbeat_message(&mut self) -> Frame<String, TypeMessage, io::Error>
+    {
+        let message = TypeMessage{
+            timestamp: 0,
+            message_id: HEARTBEAT.to_string(),
+            message_body: HEARTBEAT.to_string()
+        };
+
+        Frame::Body {
+            chunk: Some(message),
+        } 
+    }
+
+    fn streaming_flag(&mut self) -> Frame<String, TypeMessage, io::Error>
+    {
+        self.decoding_head = false;
+        Frame::Message {
+            message: "".into(),
+            body: true,
         }
     }
 }

@@ -23,8 +23,12 @@ fn main() {
                 match message {
                     NSQ::Stream(response) => {
                         let ret = response.for_each(move |message| {
-                            println!("Response {:?} {:?}", message.message_id, message.message_body);
-                            conn.fin(message.message_id); // Inform NSQ (Message consumed)
+                            if message.message_id == "_heartbeat_" {
+                                conn.nop();
+                            } else {
+                                println!("Response {:?} {:?}", message.message_id, message.message_body);
+                                conn.fin(message.message_id); // Inform NSQ (Message consumed)
+                            }
                             Ok(())
                         });
                         ret
