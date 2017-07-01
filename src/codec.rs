@@ -9,6 +9,7 @@ use tokio_proto::streaming::{Body, Message};
 use std::str;
 
 use protocol::RequestMessage;
+use response::Message as TypeMessage;
 
 // Header: Size(4-Byte) + FrameType(4-Byte)
 const HEADER_LENGTH: usize = 8;
@@ -24,7 +25,7 @@ pub struct ClientTypeMap<T> {
 }
 
 pub type NsqMessage = Message<RequestMessage, Body<RequestMessage, io::Error>>;
-pub type NsqResponseMessage = Message<String, Body<String, io::Error>>;
+pub type NsqResponseMessage = Message<String, Body<TypeMessage, io::Error>>;
 
 /// NSQ codec
 pub struct NsqCodec {
@@ -32,7 +33,7 @@ pub struct NsqCodec {
 }
 
 impl Decoder for NsqCodec {
-    type Item = Frame<String, String, io::Error>;
+    type Item = Frame<String, TypeMessage, io::Error>;
     type Error = io::Error;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, io::Error> {
@@ -66,41 +67,37 @@ impl Decoder for NsqCodec {
         } else if frame_type == FRAME_TYPE_ERROR {
             Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid packet received"))
         } else if frame_type == FRAME_TYPE_MESSAGE {
-            let decoding_head = self.decoding_head;
-            // Toggle the state
-            self.decoding_head = !decoding_head;
-
-            if decoding_head {
-                let _ = cursor.get_i64::<BigEndian>(); // timestamp
-                let _ = cursor.get_u16::<BigEndian>(); // attempts
- 
-                let mut message_id = vec![]; 
-                let reference = cursor.take(16);
-                message_id.put(reference); // hex string encoded in ASCII (16 bytes)
+            if self.decoding_head {
+                self.decoding_head = false;
 
                 // message - Just send message_id for now
                 Ok(Some(
                     Frame::Message {
-                        message: String::from_utf8(message_id).unwrap(),
+                        message: "".into(),
                         body: true,
                     }
                 ))
             } else {
+                let timestamp = cursor.get_i64::<BigEndian>(); // timestamp
+                let _ = cursor.get_u16::<BigEndian>(); // attempts
+ 
+                let data = str::from_utf8(&cursor.bytes()).unwrap().to_string();
+                let (id, body) = data.split_at(16);
+
+                let message = TypeMessage{
+                    timestamp: timestamp,
+                    message_id: id.to_string(),
+                    message_body: body.to_string()
+                };
+
                 // remove the serialized frame from the buffer.
                 buf.split_to(HEADER_LENGTH + length);
-                // Header already parsed, just skip
-                cursor.advance(26);
-                // Body
-                match str::from_utf8(&cursor.bytes()) {
-                    Ok(s) => {
-                        Ok(Some(
-                            Frame::Body {
-                                chunk: Some(s.to_string()),
-                            }
-                        ))
+
+                Ok(Some(
+                    Frame::Body {
+                        chunk: Some(message),
                     }
-                    Err(_) => Err(io::Error::new(io::ErrorKind::Other, "Invalid UTF-8")),
-                }                
+                ))              
             }
         } else {
             Ok(None)

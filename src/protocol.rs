@@ -9,6 +9,7 @@ use serde_json::{to_string};
 use futures::{Future, Stream, Sink};
 
 use commands::*;
+use response::Message;
 use codec::NsqCodec;
 use config::Config;
 
@@ -30,7 +31,7 @@ impl<T: AsyncRead + AsyncWrite + 'static> ClientProto<T> for NsqProtocol {
     type Request = RequestMessage;
     type RequestBody = RequestMessage;
     type Response = String;
-    type ResponseBody = String;
+    type ResponseBody = Message;
     
     type Error = io::Error;
     type Transport = Framed<T, NsqCodec>;
@@ -120,5 +121,9 @@ impl RequestMessage {
 
     pub fn create_fin_command(&mut self, message_id: String) {
         self.header = Some(format!("{} {}\n", commands::FIN, message_id));
-    }       
+    } 
+
+    pub fn create_nop_command(&mut self) {
+        self.header = Some(format!("{}\n", commands::NOP));
+    }           
 }

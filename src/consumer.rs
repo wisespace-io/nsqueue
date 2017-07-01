@@ -53,10 +53,15 @@ impl Consumer {
             .map(move |resp| {                                  
                 match resp {
                     Message::WithoutBody(str) => {
-                       panic!("Not supported: {}", str)
+                        if str == "_heartbeat_" {
+                            // Need to handle the heartbeat
+                        }
+
+                        panic!("Not supported: {}", str)
                     },
-                    Message::WithBody(head, body) => {                  
-                       NSQ::Stream(ResponseStream { header: head, inner: body })
+                    Message::WithBody(head, body) => {       
+                        println!("many");           
+                        NSQ::Stream(ResponseStream { inner: body })
                     }
                 }
             });
@@ -70,14 +75,22 @@ impl Consumer {
         request.create_fin_command(message_id);        
         
         let service = self.inner.clone();
-
         let resp = service.inner.call(Message::WithoutBody(request))
-            .map_err(|e| {
-                 e.into()}
-                )
-            .and_then(|resp| {
-                future::ok(())
-            });
+            .map_err(|e| e.into())
+            .and_then(|resp| future::ok(()));
+
+        Box::new(resp)
+    }    
+
+    #[allow(unused_variables)]
+    pub fn nop(&self) -> Box<Future<Item = (), Error = io::Error>> {
+        let mut request = RequestMessage::new();
+        request.create_nop_command();        
+        
+        let service = self.inner.clone();
+        let resp = service.inner.call(Message::WithoutBody(request))
+            .map_err(|e| e.into())
+            .and_then(|resp| future::ok(()));
 
         Box::new(resp)
     }    

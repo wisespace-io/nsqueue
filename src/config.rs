@@ -15,7 +15,7 @@ pub struct Config {
     feature_negotiation: bool,
 
     // Duration of time between heartbeats.
-    heartbeat_interval: u32,
+    heartbeat_interval: i64,
 
     // Timeout used by nsqd before flushing buffered writes (set to 0 to disable).
     message_timeout: u32,

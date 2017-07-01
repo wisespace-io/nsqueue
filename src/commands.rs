@@ -10,5 +10,6 @@ pub mod commands {
     pub const RDY: &'static str = "RDY";
     pub const FIN: &'static str = "FIN";
 
+    pub const NOP: &'static str = "NOP";
     pub const IDENTIFY: &'static str = "IDENTIFY";
 }
