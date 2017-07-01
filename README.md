@@ -80,7 +80,7 @@ fn main() {
                     NSQ::Stream(response) => {
                         let ret = response.for_each(move |message| {
                             println!("Response: {:?}", message.body);
-                            conn.fin(message.message_id; // Inform NSQ (Message consumed)
+                            conn.fin(message.message_id); // Inform NSQ (Message consumed)
                             Ok(()) 
                         });
                         ret

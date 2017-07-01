@@ -22,10 +22,10 @@ fn main() {
             .and_then(move |message| {
                 match message {
                     NSQ::Stream(response) => {
-                        let message_id = response.header.clone();
                         let ret = response.for_each(move |message| {
-                            println!("Response: {:?}", message);
-                            conn.fin(message_id.clone()) // Inform NSQ (Message consumed) 
+                            println!("Response {:?} {:?}", message.message_id, message.message_body);
+                            conn.fin(message.message_id); // Inform NSQ (Message consumed)
+                            Ok(())
                         });
                         ret
                     }

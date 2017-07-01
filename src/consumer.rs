@@ -54,13 +54,12 @@ impl Consumer {
                 match resp {
                     Message::WithoutBody(str) => {
                         if str == "_heartbeat_" {
-                            // Need to handle the heartbeat
+                            // Shouldn't handle it here. Need to capture it somewhere else.
                         }
 
-                        panic!("Not supported: {}", str)
+                        panic!("Not implemented: {}", str)
                     },
-                    Message::WithBody(head, body) => {       
-                        println!("many");           
+                    Message::WithBody(head, body) => {                
                         NSQ::Stream(ResponseStream { inner: body })
                     }
                 }
