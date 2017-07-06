@@ -19,7 +19,6 @@ const FRAME_TYPE_RESPONSE: i32 = 0x00;
 const FRAME_TYPE_ERROR: i32 = 0x01;
 const FRAME_TYPE_MESSAGE: i32 = 0x02;
 
-
 const HEARTBEAT: &'static str = "_heartbeat_";
 
 #[derive(Clone)]
@@ -166,8 +165,7 @@ impl Encoder for NsqCodec {
     }
 }
 
-impl NsqCodec {
-    
+impl NsqCodec {    
     fn heartbeat_message(&mut self) -> Frame<String, TypeMessage, io::Error>
     {
         let message = TypeMessage{

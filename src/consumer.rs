@@ -2,7 +2,6 @@ use futures::{Future, future};
 
 use tokio_service::Service;
 use tokio_core::reactor::Handle;
-
 use tokio_proto::{TcpClient};
 use tokio_proto::util::client_proxy::ClientProxy;
 use tokio_proto::streaming::{Message};
@@ -35,12 +34,11 @@ impl Consumer {
     } 
 
     #[allow(unused_variables)]
-    pub fn subscribe(&self, topic: String, channel: String) -> Box<Future<Item = NSQ, Error = io::Error>> {
+    pub fn subscribe(&self, topic: String, channel: String) -> Box<Future<Item = ResponseStream, Error = io::Error>> {
         let mut request = RequestMessage::new();
         request.create_sub_command(topic, channel);        
         
         let service = self.inner.clone();
-
         let resp = service.inner.call(Message::WithoutBody(request))
             .map_err(|e| {e.into()})
             .and_then(move |resp| {
@@ -53,14 +51,12 @@ impl Consumer {
             .map(move |resp| {                                  
                 match resp {
                     Message::WithoutBody(str) => {
-                        if str == "_heartbeat_" {
-                            // Shouldn't handle it here. Need to capture it somewhere else.
-                        }
-
                         panic!("Not implemented: {}", str)
                     },
                     Message::WithBody(head, body) => {                
-                        NSQ::Stream(ResponseStream { inner: body })
+                        match NSQ::Stream(ResponseStream { inner: body }) {
+                            NSQ::Stream(response) => { response }
+                        }
                     }
                 }
             });

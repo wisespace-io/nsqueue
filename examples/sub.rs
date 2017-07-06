@@ -4,10 +4,8 @@ extern crate nsqueue;
 
 use futures::{Stream, Future};
 use tokio_core::reactor::Core;
-
 use nsqueue::config::*;
 use nsqueue::consumer::*;
-use nsqueue::response::NSQ;
 
 fn main() {
      let mut core = Core::new().unwrap();
@@ -19,21 +17,17 @@ fn main() {
          Consumer::connect(&addr, &handle, Config::default())
          .and_then(|conn| {
             conn.subscribe("some_topic".into(), "some_channel".into())
-            .and_then(move |message| {
-                match message {
-                    NSQ::Stream(response) => {
-                        let ret = response.for_each(move |message| {
-                            if message.message_id == "_heartbeat_" {
-                                conn.nop();
-                            } else {
-                                println!("Response {:?} {:?}", message.message_id, message.message_body);
-                                conn.fin(message.message_id); // Inform NSQ (Message consumed)
-                            }
-                            Ok(())
-                        });
-                        ret
+            .and_then(move |response| {
+                let ret = response.for_each(move |message| {
+                    if message.message_id == "_heartbeat_" {
+                        conn.nop();
+                    } else {
+                        println!("Response {:?} {:?}", message.message_id, message.message_body);
+                        conn.fin(message.message_id); // Inform NSQ (Message consumed)
                     }
-                }
+                    Ok(())
+                });
+                ret
             })
          })
      ).unwrap();
