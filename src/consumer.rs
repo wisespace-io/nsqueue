@@ -10,7 +10,7 @@ use std::io;
 use std::net::SocketAddr;
 
 use config::Config;
-use response::{NSQ, ResponseStream};
+use response::{ResponseStream};
 use codec::{NsqMessage, NsqResponseMessage, ClientTypeMap};
 use protocol::{NsqProtocol, RequestMessage};
 
@@ -54,9 +54,7 @@ impl Consumer {
                         panic!("Not implemented: {}", str)
                     },
                     Message::WithBody(head, body) => {                
-                        match NSQ::Stream(ResponseStream { inner: body }) {
-                            NSQ::Stream(response) => { response }
-                        }
+                        ResponseStream { inner: body }
                     }
                 }
             });

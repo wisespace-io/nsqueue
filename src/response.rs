@@ -3,16 +3,11 @@ use futures::{Stream, Poll, Async};
 use tokio_proto::streaming::Body;
 
 #[derive(Debug)]
-pub enum NSQ {
-    Stream(ResponseStream),
-}
-
-#[derive(Debug)]
 pub struct ResponseStream {
     pub inner: Body<Message, io::Error>,
 }
 
-impl Stream for ResponseStream {
+impl Stream for ResponseStream {          
     type Item = Message;
     type Error = io::Error;
 
@@ -32,6 +27,23 @@ impl Stream for ResponseStream {
         }        
     }
 }
+
+/*
+impl<T> Sink for ResponseStream<T>
+    where T: Sink<SinkItem = String, SinkError = io::Error>,
+{
+    type SinkItem = String;
+    type SinkError = io::Error;
+
+    fn start_send(&mut self, item: String) -> StartSend<String, io::Error> {
+        self.upstream.start_send(item)
+    }
+
+    fn poll_complete(&mut self) -> Poll<(), io::Error> {
+        self.upstream.poll_complete()
+    }
+}
+*/
 
 pub struct Message {
     pub timestamp: i64,

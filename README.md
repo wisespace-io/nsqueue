@@ -37,7 +37,6 @@ use nsqueue::producer::*;
 fn main() {
     let mut core = Core::new().unwrap();
     let handle = core.handle();
-
     let addr = "127.0.0.1:4150".parse().unwrap();
 
     let mut messages: Vec<String> = Vec::new();
@@ -70,7 +69,6 @@ use nsqueue::consumer::*;
 fn main() {
      let mut core = Core::new().unwrap();
      let handle = core.handle();
-
      let addr = "127.0.0.1:4150".parse().unwrap();
 
      core.run(
